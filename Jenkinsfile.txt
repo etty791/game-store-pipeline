@@ -1,0 +1,95 @@
+pipeline {
+    agent any
+
+    // בלוק סביבה - משתנים לחנות המשחקים
+    environment {
+        APP_NAME = "RetroGameStore"
+        GAME_DB = "production_db"
+        PYTHON_PATH = "C:\\Users\\USER\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+        // כאן הוספנו נתיב לכלים שצריך (כמו בקוד של המורה)
+        PATH = "C:\\Program Files (x86)\\GnuWin32\\bin;${env.PATH}"
+    }
+
+    // בלוק אופציות - הגדרות ריצה
+    options {
+        timeout(time: 15, unit: 'MINUTES') // הגבלת זמן
+        buildDiscarder(logRotator(numToKeepStr: '3')) // שומר רק 3 הרצות אחרונות בסדר
+        timestamps() // מוסיף זמן לכל שורה בלוג
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "Downloading Gaming Store source code from GitHub..."
+                checkout scm
+            }
+        }
+
+        stage('Build Game Assets') {
+            steps {
+                echo "Compiling game images and catalogs..."
+                // שימוש ב-bat כמו שהמורה הראתה
+                bat 'echo building assets...'
+                stash includes: 'assets/**', name: 'game-assets', allowEmpty: true
+            }
+        }
+
+        // בלוק מקבילי - בדיקת קטלוג המשחקים ובדיקות לוגיקה בו זמנית
+        stage('Quality Assurance') {
+            parallel {
+                stage('Inventory Tests') {
+                    steps {
+                        echo "Checking if all games are in stock..."
+                        bat "${PYTHON_PATH} -m pytest tests/inventory_test.py --junitxml=results/inventory.xml"
+                    }
+                }
+                stage('Payment Gateway Tests') {
+                    steps {
+                        echo "Testing credit card integration..."
+                        bat "${PYTHON_PATH} -m pytest tests/payment_test.py --junitxml=results/payment.xml"
+                    }
+                }
+            }
+        }
+
+        // --- הבלוק החדש והמענין: "Input Confirmation" ---
+        // הבלוק הזה עוצר את ה-Pipeline ומחכה שבן אדם יאשר את המכירה לפני הפריסה!
+        stage('Manual Approval for Sale') {
+            steps {
+                script {
+                    input message: "האם את בטוחה שאת רוצה להעלות את חנות המשחקים לאוויר?", ok: "כן, שחרר את המשחקים!"
+                }
+            }
+        }
+
+        stage('Deploy to Store') {
+            // רץ רק אם אנחנו על ה-main
+            when { branch 'main' } 
+            steps {
+                // בלוק קרדנציאלס - גישה לשרת המכירות (כמו בקוד של המורה)
+                withCredentials([
+                    usernamePassword(credentialsId: 'store-admin-creds', usernameVariable: 'ADMIN_USER', passwordVariable: 'ADMIN_PASS')
+                ]) {
+                    echo "Deploying to production as ${ADMIN_USER}..."
+                    unstash 'game-assets'
+                    bat 'echo Deployment complete!'
+                }
+            }
+        }
+    }
+
+    // בלוק פוסט - סיכום הריצה
+    post {
+        success {
+            echo "The Store is UP! All tests passed."
+            junit 'results/*.xml' // מציג גרף של הבדיקות בג'נקינס
+        }
+        failure {
+            echo "Deployment failed! Check the logs to see which game crashed the store."
+        }
+        always {
+            echo "Cleaning workspace for the next gamer..."
+            cleanWs()
+        }
+    }
+}
