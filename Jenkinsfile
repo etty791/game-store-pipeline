@@ -44,8 +44,7 @@ pipeline {
         stage('Manual Approval for Sale') {
             steps {
                 script {
-                    input message: "האם את בטוחה שאת רוצה להעלות את חנות המשחקים לאוויר?", ok: "כן, שחרר את המשחקים!"
-                }
+input message: "Are you sure you want to deploy the Game Store?", ok: "Yes, release the games!"                }
             }
         }
 
@@ -76,4 +75,5 @@ pipeline {
         }
     }
 }
+
 
